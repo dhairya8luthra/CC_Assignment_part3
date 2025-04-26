@@ -64,7 +64,10 @@ void displayQuadruple(){
         }
 
         else if (!strcmp(op,"scan"))
-            printf("scan %s %s\n", a1, a2);
+            if (r[0] != '\0')
+            printf("scan %s, %s\n", a2,r);
+            else
+            printf("scan %s\n", a2);
         else if (!strcmp(op,""))
             printf("%s = %s\n", r, a1);
         else
@@ -206,18 +209,45 @@ print_args
   | expr COMMA print_args{ free($3); $$ = $1; }
   ;
 
+/* scan_stmt: either just a format string, or format + comma-list of IDs */
 scan_stmt
-  : SCAN LPAREN scan_fmt COMMA scan_args RPAREN SEMICOLON
-    { addQuadruple("", "scan", $3, ""); free($3); }
+  : SCAN LPAREN scan_fmt RPAREN SEMICOLON
+    {
+      /* no args case: a2 = format, res = "" */
+      addQuadruple("", "scan", $3, "");
+      free($3);
+    }
+  | SCAN LPAREN scan_fmt COMMA scan_args RPAREN SEMICOLON
+    {
+      /* format in $3, comma-separated IDs in $5 */
+      addQuadruple("", "scan", $3, $5);
+      free($3);
+      free($5);
+    }
   ;
 
+
 scan_fmt
-  : STRCONST { $$ = $1; }
+  : STRCONST
+    { $$ = $1; }
   ;
 
 scan_args
-  : ID                 { free($1); }
-  | ID COMMA scan_args { free($1); free($3); }
+  : ID
+    {
+      /* single-variable case */
+      $$ = $1;    /* e.g. "a" */
+    }
+  | ID COMMA scan_args
+    {
+     
+      size_t L = strlen($1) + 2 + strlen($3) + 1;
+      char *buf = malloc(L);
+      sprintf(buf, "%s, %s", $1, $3);
+      free($1);
+      free($3);
+      $$ = buf;   /* e.g. "a, b, c" */
+    }
   ;
 
 cond_stmt

@@ -297,7 +297,32 @@ for_setup
       }
       free($4); free($6);
     }
-  ;
+
+    |
+
+
+    FOR ID ASSIGNOP expr TO expr DEC expr
+{
+  /* save for the closing action */
+  for_var_name = $2;
+  for_inc_val   = $8;
+  /* init loop var */
+  addQuadruple($4, "", "", $2);
+  updateSymbol($2, atoi($4));
+  /* labels */
+  for_head = newLabel();
+  for_exit = newLabel();
+  /* head label */
+  addQuadruple("", "label", "", for_head);
+  /* test: tX = ID < lower */
+  {
+    char *T = tempVar();
+    addQuadruple($2, "<", $6, T);         // DEC: exit if variable < lower bound
+    addQuadruple(T, "iffalse", "", for_exit);
+  }
+  free($4); free($6);
+}
+;
 
 block
   : BEGIN_KEY stmt_block END

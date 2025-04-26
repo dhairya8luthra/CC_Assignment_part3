@@ -56,8 +56,13 @@ void displayQuadruple(){
             printf("goto %s\n", r);
         else if (!strcmp(op,"label"))
             printf("%s:\n", r);
-        else if (!strcmp(op,"print"))
-            printf("print %s %s\n", a1, a2);
+        else if (!strcmp(op,"print")){
+            if (a2[0] != '\0')
+            printf("print %s, %s\n", a2,r);
+            else
+            printf("print %s\n", a1);
+        }
+
         else if (!strcmp(op,"scan"))
             printf("scan %s %s\n", a1, a2);
         else if (!strcmp(op,""))

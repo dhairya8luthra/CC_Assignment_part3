@@ -139,7 +139,14 @@ stmt
 assign_stmt
   : ID ASSIGNOP expr SEMICOLON
     {
-      addQuadruple($3, "", "", $1);
+      if ($3[0] != 't') {
+        char *T = tempVar();
+        addQuadruple($3,  "",     "", T);
+        addQuadruple(T,   "",     "", $1);
+      }
+      else{
+        addQuadruple($3,  "",     "", $1);
+      }
       updateSymbol($1, atoi($3));
       free($1); free($3);
     }
@@ -177,24 +184,27 @@ scan_args
   ;
 
 cond_stmt
-  : IF LPAREN expr RPAREN block ELSE block SEMICOLON
+  : IF LPAREN expr RPAREN
       {
+        
         elseLab = newLabel();
         endLab  = newLabel();
-        addQuadruple($3,"iffalse","",elseLab);
+     
+        addQuadruple($3, "iffalse", "", elseLab);
         free($3);
-        /* after then: skip over else */
-        addQuadruple("", "goto", "", endLab);
-        addQuadruple("", "label", "", elseLab);
-        /* else‐block code was just emitted */
-        addQuadruple("", "label", "", endLab);
       }
-  | IF LPAREN expr RPAREN block SEMICOLON
+    block
       {
-        elseLab = newLabel();
-        addQuadruple($3,"iffalse","",elseLab);
-        free($3);
+        
+        addQuadruple("", "goto", "", endLab);
+     
         addQuadruple("", "label", "", elseLab);
+      }
+    ELSE
+    block SEMICOLON
+      {
+       
+        addQuadruple("", "label", "", endLab);
       }
   ;
 
@@ -317,10 +327,9 @@ expr
     }
   | INTCONST
     {
-      char *T = tempVar(), buf[32];
+      char buf[32];
       sprintf(buf,"(%d,10)",$1);
-      addQuadruple(buf,"","",T);
-      $$ = strdup(T);
+      $$ = strdup(buf);
     }
   | CHARCONST
     {

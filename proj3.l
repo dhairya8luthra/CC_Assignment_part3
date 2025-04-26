@@ -54,12 +54,12 @@ NEWLINE     \n
 "/"         { return DIVOP; }
 "%"         { return MODOP; }
 
-"="         { return RELOP; }
-">"         { return RELOP; }
-"<"         { return RELOP; }
-">="        { return RELOP; }
-"<="        { return RELOP; }
-"!="        { return RELOP; }
+"="         { yylval.sval = strdup(yytext);return RELOP; }
+">"         { yylval.sval = strdup(yytext);return RELOP; }
+"<"         { yylval.sval = strdup(yytext);return RELOP; }
+">="        { yylval.sval = strdup(yytext);return RELOP; }
+"<="        { yylval.sval = strdup(yytext);return RELOP; }
+"!="        { yylval.sval = strdup(yytext);return RELOP; }
 
 {LETTER}({LETTER}|{DIGIT}|_)*  {
     

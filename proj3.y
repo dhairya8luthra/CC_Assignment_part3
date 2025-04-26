@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include "symtable.h"
+static char *while_start;
+static char *while_exit;
 
 static int parseLiteral(const char *lit) {
     char valstr[32], basestr[8];
@@ -279,18 +281,20 @@ loop_stmt
   : while_stmt
   | for_stmt
   ;
-
 while_stmt
-  : WHILE LPAREN expr RPAREN DO block SEMICOLON
-    {
-      char *L1 = newLabel(), *L2 = newLabel();
-      addQuadruple("", "label", "", L1);
-      addQuadruple($3, "iffalse", "", L2);
-      free($3);
-      /* body already emitted */
-      addQuadruple("", "goto", "", L1);
-      addQuadruple("", "label", "", L2);
-    }
+  : WHILE LPAREN expr RPAREN
+      {
+        while_start = newLabel();
+        while_exit  = newLabel();
+        addQuadruple("", "label",   "", while_start);
+        addQuadruple($3, "iffalse", "", while_exit);
+        free($3);
+      }
+    DO block SEMICOLON
+      {
+        addQuadruple("", "goto",    "", while_start);
+        addQuadruple("", "label",   "", while_exit);
+      }
   ;
 
 for_stmt

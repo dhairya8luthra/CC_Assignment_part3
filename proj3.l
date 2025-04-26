@@ -78,45 +78,24 @@ NEWLINE     \n
 
 \([0-9]+,[ ]*(2|8|10)\)  {
     char value[32], base[4];
-    sscanf(yytext, "(%[^,], %[^)])", value, base);
-    
-    
+    sscanf(yytext, "(%[^,],%[^)])", value, base);
+
     int valid = 1;
-    if (strcmp(base, "2") == 0) {
-        
-        for (int i = 0; value[i] != '\0'; i++) {
-            if (value[i] != '0' && value[i] != '1') {
-                valid = 0;
-                break;
-            }
-        }
-    } else if (strcmp(base, "8") == 0) {
-        
-        for (int i = 0; value[i] != '\0'; i++) {
-            if (value[i] < '0' || value[i] > '7') {
-                valid = 0;
-                break;
-            }
-        }
-    } else if (strcmp(base, "10") == 0) {
-        
-        for (int i = 0; value[i] != '\0'; i++) {
-            if (value[i] < '0' || value[i] > '9') {
-                valid = 0;
-                break;
-            }
-        }
-    } else {
-        
-        valid = 0;
+    int base_int = atoi(base);
+
+    for (int i = 0; value[i] != '\0'; i++) {
+        if (base_int == 2 && value[i] != '0' && value[i] != '1') valid = 0;
+        else if (base_int == 8 && (value[i] < '0' || value[i] > '7')) valid = 0;
+        else if (base_int == 10 && (value[i] < '0' || value[i] > '9')) valid = 0;
     }
-    
-    if (!valid) {
-        printf("Syntax error !!!");
+
+    if (!valid || (base_int != 2 && base_int != 8 && base_int != 10)) {
+        printf("Syntax error\n");
         exit(1);
     }
-    
-    yylval.ival = atoi(value);
+
+    yylval.iconst.base = base_int;
+    yylval.iconst.value = atoi(value);
     return INTCONST;
 }
 [0-9]+ return INDEX;

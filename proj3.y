@@ -5,6 +5,28 @@
 #include <string.h>
 #include "symtable.h"
 
+static int parseLiteral(const char *lit) {
+    char valstr[32], basestr[8];
+    int i = 0;
+    /* copy digits before comma */
+    const char *p = lit + 1;           /* skip the '(' */
+    while (*p != ',' && *p) valstr[i++] = *p++;
+    valstr[i] = '\0';
+
+    /* skip comma and any spaces */
+    while (*p && (*p == ',' || *p == ' ')) ++p;
+
+    /* copy base digits before ')' */
+    i = 0;
+    while (*p && *p != ')') basestr[i++] = *p++;
+    basestr[i] = '\0';
+
+    int base = atoi(basestr);
+    /* now convert valstr in that base to a C int */
+    return (int)strtol(valstr, NULL, base);
+}
+
+
 extern FILE *yyin;
 extern int yylex(void);
 void yyerror(const char *s);
@@ -71,6 +93,7 @@ static char *elseLab, *endLab;
 
 %union {
     int    ival;
+    struct {int value,base;}iconst;
     char*  sval;
 }
 
@@ -79,7 +102,8 @@ static char *elseLab, *endLab;
 %token <sval> PRINT SCAN ASSIGNOP ADDOP SUBOP MULOP DIVOP MODOP RELOP
 %token <sval> LPAREN RPAREN LBRACKET RBRACKET COMMA SEMICOLON COLON
 %token <sval> ID STRCONST
-%token <ival> NUM INTCONST CHARCONST INDEX
+%token <ival> NUM CHARCONST INDEX
+%token <iconst> INTCONST
 
 %type <sval> program var_decl_block varlist var_decl type
 %type <sval> stmt_block stmt assign_stmt io_stmt print_stmt scan_stmt print_args scan_fmt scan_args cond_stmt loop_stmt while_stmt for_stmt for_setup block expr
@@ -137,12 +161,20 @@ stmt
   ;
 
 assign_stmt
+  
   : ID ASSIGNOP expr SEMICOLON
     {
+      
       if ($3[0] != 't') {
         char *T = tempVar();
         addQuadruple($3,  "",     "", T);
         addQuadruple(T,   "",     "", $1);
+      }
+      else if($3[0] == ')'){
+        char *T = tempVar();
+        addQuadruple($3, "", "", T);
+        addQuadruple(T,  "", "", $1);
+        updateSymbol($1, parseLiteral($3));
       }
       else{
         addQuadruple($3,  "",     "", $1);
@@ -328,7 +360,7 @@ expr
   | INTCONST
     {
       char buf[32];
-      sprintf(buf,"(%d,10)",$1);
+      sprintf(buf, "(%d,%d)", $1.value, $1.base);
       $$ = strdup(buf);
     }
   | CHARCONST

@@ -284,16 +284,18 @@ loop_stmt
 while_stmt
   : WHILE LPAREN expr RPAREN
       {
+        struct quadruple rel = quad[--qind];
         while_start = newLabel();
         while_exit  = newLabel();
         addQuadruple("", "label",   "", while_start);
-        addQuadruple($3, "iffalse", "", while_exit);
+        quad[qind++] = rel;
+        addQuadruple(rel.res, "iffalse", "", while_exit);
         free($3);
       }
     DO block SEMICOLON
       {
-        addQuadruple("", "goto",    "", while_start);
-        addQuadruple("", "label",   "", while_exit);
+        addQuadruple("", "goto",  "", while_start);
+        addQuadruple("", "label", "", while_exit);
       }
   ;
 

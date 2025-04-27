@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "symtable.h"
+static int in_bound = 0;
 
 static char *while_start, *while_exit;
 static char *for_var_name = NULL, *for_inc_val = NULL, *for_head = NULL, *for_exit = NULL, *for_bound = NULL;
@@ -352,7 +353,7 @@ for_inc_temp = IncOp;
       }
 
 /* ---------- for-loop (decrementing) ---------- */
-  | FOR ID ASSIGNOP expr TO expr DEC expr
+  | FOR ID ASSIGNOP expr TO bound_expr DEC expr
       {                           /* ← same idea for DEC case */
         addQuadruple($4, "", "", $2);
         updateSymbol($2, atoi($4));
@@ -381,112 +382,103 @@ for_inc_temp = IncOp;
   ;
 
 bound_expr
-  : bound_expr ADDOP bound_expr %prec BOUND_PREC
-      { $$ = makeBinary($1, "+", $3);  free($1); free($3); }
-  | bound_expr SUBOP bound_expr %prec BOUND_PREC
-      { $$ = makeBinary($1, "-", $3);  free($1); free($3); }
-  | bound_expr MULOP bound_expr %prec BOUND_PREC
-      { $$ = makeBinary($1, "*", $3);  free($1); free($3); }
-  | bound_expr DIVOP bound_expr %prec BOUND_PREC
-      { $$ = makeBinary($1, "/", $3);  free($1); free($3); }
-  | bound_expr MODOP bound_expr %prec BOUND_PREC
-      { $$ = makeBinary($1, "mod", $3); free($1); free($3); }
-
-  | bound_expr RELOP bound_expr %prec BOUND_PREC
-      { $$ = makeBinary($1, $2, $3);   free($1); free($2); free($3); }
-
-  | SUBOP bound_expr %prec UMINUS 
-      { $$ = makeBinary("uminus", "", $2);        free($2); }
-
-  | LPAREN bound_expr RPAREN     { $$ = $2; }
-
-  | NUM                        { $$ = intToStr($1); }
-
-  | INTCONST 
-      
-    {
-      /* keep the original (value, base) text */
-      char buf[32];
-      sprintf(buf, "(%d, %d)", $1.value, $1.base);
-      $$ = strdup(buf);
-    }
-
-
-  | CHARCONST
-      {
-        char tmp[4];
-        sprintf(tmp, "'%c'", (char)$1);
-        $$ = strdup(tmp);
-      }
-
-  | ID 
-      {
-        int i = lookupSymbol($1);
-        if (i < 0) yyerror("undeclared var");
-        if (!symtab[i].init) yyerror("uninitialized var");
-        $$ = strdup($1);
-        free($1);
-      }
+  :
+     { in_bound = 1; }
+     expr
+     { in_bound = 0; $$ = $2; }
   ;
-
 
 
 expr
   : expr ADDOP expr
     {
-      char *T = tempVar();
-      addQuadruple($1, "+", $3, T);
-      $$ = strdup(T);
-      free($1); free($3);
+      if (in_bound) {
+        $$ = makeBinary($1, "+", $3);
+        free($1); free($3);
+      } else {
+        char *T = tempVar();
+        addQuadruple($1, "+", $3, T);
+        $$ = strdup(T);
+        free($1); free($3);
+      }
     }
   | expr SUBOP expr
     {
-      char *T = tempVar();
-      addQuadruple($1, "-", $3, T);
-      $$ = strdup(T);
-      free($1); free($3);
+      if (in_bound) {
+        $$ = makeBinary($1, "-", $3);
+        free($1); free($3);
+      } else {
+        char *T = tempVar();
+        addQuadruple($1, "-", $3, T);
+        $$ = strdup(T);
+        free($1); free($3);
+      }
     }
   | expr MULOP expr
     {
-      char *T = tempVar();
-      addQuadruple($1, "*", $3, T);
-      $$ = strdup(T);
-      free($1); free($3);
+      if (in_bound) {
+        $$ = makeBinary($1, "*", $3);
+        free($1); free($3);
+      } else {
+        char *T = tempVar();
+        addQuadruple($1, "*", $3, T);
+        $$ = strdup(T);
+        free($1); free($3);
+      }
     }
   | expr DIVOP expr
     {
-      char *T = tempVar();
-      addQuadruple($1, "/", $3, T);
-      $$ = strdup(T);
-      free($1); free($3);
+      if (in_bound) {
+        $$ = makeBinary($1, "/", $3);
+        free($1); free($3);
+      } else {
+        char *T = tempVar();
+        addQuadruple($1, "/", $3, T);
+        $$ = strdup(T);
+        free($1); free($3);
+      }
     }
   | expr MODOP expr
     {
-      char *T = tempVar();
-      addQuadruple($1, "mod", $3, T);
-      $$ = strdup(T);
-      free($1); free($3);
+      if (in_bound) {
+        $$ = makeBinary($1, "mod", $3);
+        free($1); free($3);
+      } else {
+        char *T = tempVar();
+        addQuadruple($1, "mod", $3, T);
+        $$ = strdup(T);
+        free($1); free($3);
+      }
     }
   | expr RELOP expr
     {
-      char *T = condVar();
-      addQuadruple($1, $2, $3, T);
-      $$ = strdup(T);
-      free($1); free($3); free($2);
+      if (in_bound) {
+        $$ = makeBinary($1, $2, $3);
+        free($1); free($2); free($3);
+      } else {
+        char *T = condVar();
+        addQuadruple($1, $2, $3, T);
+        $$ = strdup(T);
+        free($1); free($3); free($2);
+      }
     }
-  | SUBOP expr %prec UMINUS
+  | SUBOP expr        %prec UMINUS
     {
-      char *T = tempVar();
-      addQuadruple("uminus", "", $2, T);
-      $$ = strdup(T);
+      if (in_bound) {
+        $$ = makeBinary("uminus","",$2);
+      } else {
+        char *T = tempVar();
+        addQuadruple("uminus","",$2,T);
+        $$ = strdup(T);
+      }
       free($2);
     }
-  | LPAREN expr RPAREN
+  | '(' expr ')'
     { $$ = $2; }
   | NUM
     {
-      char buf[20];
-      sprintf(buf,"%d",$1);
+      char buf[32];
+      sprintf(buf, "%d", $1);
       $$ = strdup(buf);
     }
   | INTCONST
@@ -497,21 +489,24 @@ expr
     }
   | CHARCONST
     {
-      char *T = tempVar(), buf[4];
-      sprintf(buf,"'%c'",(char)$1);
-      addQuadruple(buf,"","",T);
-      $$ = strdup(T);
+      char buf[4];
+      sprintf(buf, "'%c'", (char)$1);
+      if (in_bound) {
+        $$ = strdup(buf);
+      } else {
+        char *T = tempVar();
+        addQuadruple(buf,"","",T);
+        $$ = strdup(T);
+      }
     }
   | ID
     {
-      int i = lookupSymbol($1);
-      if (i < 0) yyerror("undeclared var");
-      if (!symtab[i].init) yyerror("uninitialized var");
+      int idx = lookupSymbol($1);
+      if (idx < 0) yyerror("undeclared var");
+      if (!symtab[idx].init) yyerror("uninitialized var");
       $$ = strdup($1);
       free($1);
-    }
-  ;
-
+    };
 %%
 
 void yyerror(const char *s) {

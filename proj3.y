@@ -1,45 +1,38 @@
-/* proj3.y */
+/* proj3.y - Corrected Version */
 %{
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "symtable.h"
-static char *while_start;
-static char *while_exit;
 
-static int parseLiteral(const char *lit) {
-    char valstr[32], basestr[8];
-    int i = 0;
-    /* copy digits before comma */
-    const char *p = lit + 1;           /* skip the '(' */
-    while (*p != ',' && *p) valstr[i++] = *p++;
-    valstr[i] = '\0';
+static char *while_start, *while_exit;
+static char *for_var_name = NULL, *for_inc_val = NULL, *for_head = NULL, *for_exit = NULL, *for_bound = NULL;
+static int for_is_inc = 0;
 
-    /* skip comma and any spaces */
-    while (*p && (*p == ',' || *p == ' ')) ++p;
 
-    /* copy base digits before ')' */
-    i = 0;
-    while (*p && *p != ')') basestr[i++] = *p++;
-    basestr[i] = '\0';
-
-    int base = atoi(basestr);
-    /* now convert valstr in that base to a C int */
-    return (int)strtol(valstr, NULL, base);
+static char *makeBinary(const char *l, const char *op, const char *r)
+{
+    size_t L = strlen(l) + strlen(op) + strlen(r) + 3; /* 2 spaces + NUL */
+    char *buf = (char *)malloc(L);
+    sprintf(buf, "%s %s %s", l, op, r);
+    return buf;
+}
+/* build the decimal text of an integer and return strdup’ed copy       */
+static char *intToStr(int v)
+{
+    char tmp[32];
+    sprintf(tmp, "%d", v);
+    return strdup(tmp);
 }
 
-
-extern FILE *yyin;
-extern int yylex(void);
-void yyerror(const char *s);
 
 /* --- 3AC storage --- */
 int qind = 0;
 struct quadruple {
-    char op[8], a1[20], a2[20], res[20];
+    char op[8], a1[40], a2[40], res[40];
 } quad[200];
 
-void addQuadruple(const char *x,const char *o,const char *y,const char *r){
+void addQuadruple(const char *x, const char *o, const char *y, const char *r){
     strcpy(quad[qind].op,  o);
     strcpy(quad[qind].a1, x);
     strcpy(quad[qind].a2, y);
@@ -47,58 +40,83 @@ void addQuadruple(const char *x,const char *o,const char *y,const char *r){
     qind++;
 }
 
-void displayQuadruple(){
-    printf("\n--- Three Address Code ---\n");
-    for(int i=0;i<qind;i++){
-        char *op=quad[i].op, *a1=quad[i].a1,
-             *a2=quad[i].a2, *r=quad[i].res;
-        if (!strcmp(op,"iffalse"))
-            printf("if %s=0 goto %s\n", a1, r);
-        else if (!strcmp(op,"goto"))
-            printf("goto %s\n", r);
-        else if (!strcmp(op,"label"))
-            printf("%s:\n", r);
-        else if (!strcmp(op,"print")){
-            if (a2[0] != '\0')
-            printf("print %s, %s\n", a2,r);
-            else
-            printf("print %s\n", a1);
-        }
-
-        else if (!strcmp(op,"scan"))
-            if (r[0] != '\0')
-            printf("scan %s, %s\n", a2,r);
-            else
-            printf("scan %s\n", a2);
-        else if (!strcmp(op,""))
-            printf("%s = %s\n", r, a1);
-        else
-            printf("%s = %s %s %s\n", r, a1, op, a2);
-    }
-    printf("END PROGRAM\n");
-}
-
-/* --- temp vars and labels (fixed) --- */
-int tempCount = 0;
+/* --- temp vars and labels --- */
+int tempCount = 1, condCount = 1, lblCount = 1;
+static char *elseLab, *endLab;
 char* tempVar(){
     char buf[20];
     sprintf(buf, "t%d", tempCount++);
     return strdup(buf);
 }
 
-int lblCount = 0;
+char* condVar(){
+    char buf[20];
+    sprintf(buf, "t_cond%d", condCount++);
+    return strdup(buf);
+}
+
 char* newLabel(){
     char buf[20];
     sprintf(buf, "L%d", lblCount++);
     return strdup(buf);
 }
 
-/* for‐loop temporaries */
-static char *for_var_name, *for_inc_val;
-static char *for_head, *for_exit;
+/* --- display 3AC in required format --- */
+void displayQuadruple(){
+    printf("\n--- Three Address Code ---\n");
+    int lastWasLabel = 0;
+    for(int i=0;i<qind;i++){
+        char *op=quad[i].op, *a1=quad[i].a1, *a2=quad[i].a2, *r=quad[i].res;
 
-/* if–else labels */
-static char *elseLab, *endLab;
+        if (!strcmp(op,"label")) {
+            if (i != 0) printf("\n");
+            printf("%s:\n", r);
+            lastWasLabel = 1;
+            continue;
+        }
+
+        if (lastWasLabel) {
+            printf("\n");
+            lastWasLabel = 0;
+        }
+
+        printf("  ");
+
+        if (!strcmp(op,"iffalse"))
+            printf("if %s := 0 goto %s\n", a1, r);
+        else if (!strcmp(op,"iftrue"))
+            printf("if %s == 1 goto %s\n", a1, r);
+        else if (!strcmp(op,"goto"))
+            printf("goto %s\n", r);
+        else if (!strcmp(op,""))
+            printf("%s := %s\n", r, a1);
+        else
+            printf("%s := %s %s %s\n", r, a1, op, a2);
+    }
+    printf("\n");
+}
+
+static char *for_inc_temp = NULL;
+
+
+/* --- tuple formatting helper --- */
+static int parseLiteral(const char *lit) {
+    char valstr[32], basestr[8];
+    int i = 0;
+    const char *p = lit + 1;
+    while (*p != ',' && *p) valstr[i++] = *p++;
+    valstr[i] = '\0';
+    while (*p && (*p == ',' || *p == ' ')) ++p;
+    i = 0;
+    while (*p && *p != ')') basestr[i++] = *p++;
+    basestr[i] = '\0';
+    int base = atoi(basestr);
+    return (int)strtol(valstr, NULL, base);
+}
+
+extern FILE *yyin;
+extern int yylex(void);
+void yyerror(const char *s);
 %}
 
 %union {
@@ -106,6 +124,8 @@ static char *elseLab, *endLab;
     struct {int value,base;}iconst;
     char*  sval;
 }
+
+
 
 %token <sval> BEGIN_KEY END PROGRAM VARDECL INT CHAR
 %token <sval> IF ELSE WHILE FOR DO TO INC DEC
@@ -115,13 +135,19 @@ static char *elseLab, *endLab;
 %token <ival> NUM CHARCONST INDEX
 %token <iconst> INTCONST
 
+
+
 %type <sval> program var_decl_block varlist var_decl type
-%type <sval> stmt_block stmt assign_stmt io_stmt print_stmt scan_stmt print_args scan_fmt scan_args cond_stmt loop_stmt while_stmt for_stmt for_setup block expr
+%type <sval> stmt_block stmt assign_stmt bound_expr io_stmt print_stmt scan_stmt print_args scan_fmt scan_args cond_stmt loop_stmt while_stmt for_stmt for_setup block expr
+
+
+
 
 %left RELOP
 %left ADDOP SUBOP
 %left MULOP DIVOP MODOP
-%nonassoc UMINUS LOWER_THAN_ELSE
+%nonassoc UMINUS LOWER_THAN_ELSE BOUND_PREC
+%right ASSIGNOP  
 
 %%
 
@@ -171,24 +197,9 @@ stmt
   ;
 
 assign_stmt
-  
   : ID ASSIGNOP expr SEMICOLON
     {
-      
-      if ($3[0] != 't') {
-        char *T = tempVar();
-        addQuadruple($3,  "",     "", T);
-        addQuadruple(T,   "",     "", $1);
-      }
-      else if($3[0] == ')'){
-        char *T = tempVar();
-        addQuadruple($3, "", "", T);
-        addQuadruple(T,  "", "", $1);
-        updateSymbol($1, parseLiteral($3));
-      }
-      else{
-        addQuadruple($3,  "",     "", $1);
-      }
+      addQuadruple($3, "", "", $1);
       updateSymbol($1, atoi($3));
       free($1); free($3);
     }
@@ -211,23 +222,12 @@ print_args
   | expr COMMA print_args{ free($3); $$ = $1; }
   ;
 
-/* scan_stmt: either just a format string, or format + comma-list of IDs */
 scan_stmt
   : SCAN LPAREN scan_fmt RPAREN SEMICOLON
-    {
-      /* no args case: a2 = format, res = "" */
-      addQuadruple("", "scan", $3, "");
-      free($3);
-    }
+    { addQuadruple("", "scan", $3, ""); free($3); }
   | SCAN LPAREN scan_fmt COMMA scan_args RPAREN SEMICOLON
-    {
-      /* format in $3, comma-separated IDs in $5 */
-      addQuadruple("", "scan", $3, $5);
-      free($3);
-      free($5);
-    }
+    { addQuadruple("", "scan", $3, $5); free($3); free($5); }
   ;
-
 
 scan_fmt
   : STRCONST
@@ -236,43 +236,36 @@ scan_fmt
 
 scan_args
   : ID
-    {
-      /* single-variable case */
-      $$ = $1;    /* e.g. "a" */
-    }
+    { $$ = $1; }
   | ID COMMA scan_args
     {
-     
       size_t L = strlen($1) + 2 + strlen($3) + 1;
       char *buf = malloc(L);
       sprintf(buf, "%s, %s", $1, $3);
       free($1);
       free($3);
-      $$ = buf;   /* e.g. "a, b, c" */
+      $$ = buf;
     }
   ;
 
 cond_stmt
-  : IF LPAREN expr RPAREN
+  : IF LPAREN bound_expr RPAREN
       {
-        
         elseLab = newLabel();
         endLab  = newLabel();
-     
-        addQuadruple($3, "iffalse", "", elseLab);
+        char *Tcond = condVar();
+        addQuadruple($3, "", "", Tcond);
+        addQuadruple(Tcond, "iffalse", "", elseLab);
         free($3);
       }
     block
       {
-        
         addQuadruple("", "goto", "", endLab);
-     
         addQuadruple("", "label", "", elseLab);
       }
     ELSE
     block SEMICOLON
       {
-       
         addQuadruple("", "label", "", endLab);
       }
   ;
@@ -281,15 +274,16 @@ loop_stmt
   : while_stmt
   | for_stmt
   ;
+
 while_stmt
-  : WHILE LPAREN expr RPAREN
+  : WHILE LPAREN bound_expr RPAREN
       {
-        struct quadruple rel = quad[--qind];
         while_start = newLabel();
         while_exit  = newLabel();
-        addQuadruple("", "label",   "", while_start);
-        quad[qind++] = rel;
-        addQuadruple(rel.res, "iffalse", "", while_exit);
+        addQuadruple("", "label", "", while_start);
+        char *Tcond = condVar();
+        addQuadruple($3, "", "", Tcond);
+        addQuadruple(Tcond, "iffalse", "", while_exit);
         free($3);
       }
     DO block SEMICOLON
@@ -302,67 +296,140 @@ while_stmt
 for_stmt
   : for_setup DO block SEMICOLON
     {
-      /* after body: increment, back to head, exit label */
-      addQuadruple(for_inc_val, "", "", for_var_name);
+      char *Tupd = tempVar();
+      if (for_is_inc) {
+        addQuadruple(for_var_name, "+", for_inc_temp, Tupd);
+      } else {
+        addQuadruple(for_var_name, "-", for_inc_temp, Tupd);
+      }
+      addQuadruple(Tupd, "", "", for_var_name);
       addQuadruple("", "goto", "", for_head);
       addQuadruple("", "label", "", for_exit);
       free(for_var_name);
       free(for_inc_val);
+      free(for_head);
+      free(for_exit);
+      free(for_bound);
     }
   ;
 
+/* ---------- for-loop (incrementing) ---------- */
 for_setup
-  : FOR ID ASSIGNOP expr TO expr INC expr
-    {
-      /* save for the closing action */
-      for_var_name = $2;
-      for_inc_val   = $8;
-      /* init loop var */
-      addQuadruple($4, "", "", $2);
-      updateSymbol($2, atoi($4));
-      /* labels */
-      for_head = newLabel();
-      for_exit = newLabel();
-      /* head label */
-      addQuadruple("", "label", "", for_head);
-      /* test: tX = ID > upper */
-      {
-        char *T = tempVar();
-        addQuadruple($2, ">", $6, T);
-        addQuadruple(T, "iffalse", "", for_exit);
+  : FOR ID ASSIGNOP expr TO bound_expr INC expr
+      {         
+
+
+        /* 1. initialise loop variable */
+        addQuadruple($4, "", "", $2);
+        updateSymbol($2, atoi($4));
+
+        /* 2. create the head label before the bound is parsed */
+        for_head = newLabel();
+        addQuadruple("", "label", "", for_head);
+
+        /* 3. remember info we still need */
+        for_var_name = $2;
+        for_is_inc   = 1;
+      
+ // SAVE it globally for later use
+
+        for_bound   = $6;
+        for_inc_val = $8;
+        for_exit    = newLabel();
+
+        /* evaluate (possibly changed) bound each iteration */
+        char *Tbound = tempVar();
+        addQuadruple($6, "", "", Tbound);
+
+        char *IncOp = tempVar();
+for_inc_temp = IncOp; 
+        
+        addQuadruple($8, "", "", IncOp);
+
+        char *Tcond = condVar();
+        addQuadruple($2, ">", Tbound, Tcond);    /* termination test   */
+        addQuadruple(Tcond, "iffalse", "", for_exit);
       }
-      free($4); free($6);
-    }
 
-    |
+/* ---------- for-loop (decrementing) ---------- */
+  | FOR ID ASSIGNOP expr TO expr DEC expr
+      {                           /* ← same idea for DEC case */
+        addQuadruple($4, "", "", $2);
+        updateSymbol($2, atoi($4));
 
+        for_head = newLabel();
+        addQuadruple("", "label", "", for_head);
 
-    FOR ID ASSIGNOP expr TO expr DEC expr
-{
-  /* save for the closing action */
-  for_var_name = $2;
-  for_inc_val   = $8;
-  /* init loop var */
-  addQuadruple($4, "", "", $2);
-  updateSymbol($2, atoi($4));
-  /* labels */
-  for_head = newLabel();
-  for_exit = newLabel();
-  /* head label */
-  addQuadruple("", "label", "", for_head);
-  /* test: tX = ID < lower */
-  {
-    char *T = tempVar();
-    addQuadruple($2, "<", $6, T);         // DEC: exit if variable < lower bound
-    addQuadruple(T, "iffalse", "", for_exit);
-  }
-  free($4); free($6);
-}
-;
+        for_var_name = $2;
+        for_is_inc   = 0;
+  
+        for_bound   = $6;
+        for_inc_val = $8;
+        for_exit    = newLabel();
 
-block
+        char *Tbound = tempVar();
+        addQuadruple($6, "", "", Tbound);
+
+        char *Tcond = condVar();
+        addQuadruple($2, "<", Tbound, Tcond);
+        addQuadruple(Tcond, "iffalse", "", for_exit);
+      }
+  ;
+
+  block
   : BEGIN_KEY stmt_block END
   ;
+
+bound_expr
+  : bound_expr ADDOP bound_expr %prec BOUND_PREC
+      { $$ = makeBinary($1, "+", $3);  free($1); free($3); }
+  | bound_expr SUBOP bound_expr %prec BOUND_PREC
+      { $$ = makeBinary($1, "-", $3);  free($1); free($3); }
+  | bound_expr MULOP bound_expr %prec BOUND_PREC
+      { $$ = makeBinary($1, "*", $3);  free($1); free($3); }
+  | bound_expr DIVOP bound_expr %prec BOUND_PREC
+      { $$ = makeBinary($1, "/", $3);  free($1); free($3); }
+  | bound_expr MODOP bound_expr %prec BOUND_PREC
+      { $$ = makeBinary($1, "mod", $3); free($1); free($3); }
+
+  | bound_expr RELOP bound_expr %prec BOUND_PREC
+      { $$ = makeBinary($1, $2, $3);   free($1); free($2); free($3); }
+
+  | SUBOP bound_expr %prec UMINUS 
+      { $$ = makeBinary("uminus", "", $2);        free($2); }
+
+  | LPAREN bound_expr RPAREN     { $$ = $2; }
+
+  | NUM                        { $$ = intToStr($1); }
+
+  | INTCONST 
+      
+    {
+      /* keep the original (value, base) text */
+      char buf[32];
+      sprintf(buf, "(%d, %d)", $1.value, $1.base);
+      $$ = strdup(buf);
+    }
+
+
+  | CHARCONST
+      {
+        char tmp[4];
+        sprintf(tmp, "'%c'", (char)$1);
+        $$ = strdup(tmp);
+      }
+
+  | ID 
+      {
+        int i = lookupSymbol($1);
+        if (i < 0) yyerror("undeclared var");
+        if (!symtab[i].init) yyerror("uninitialized var");
+        $$ = strdup($1);
+        free($1);
+      }
+  ;
+
+
 
 expr
   : expr ADDOP expr
@@ -388,7 +455,6 @@ expr
     }
   | expr DIVOP expr
     {
-      if (!atoi($3)) yyerror("division by zero");
       char *T = tempVar();
       addQuadruple($1, "/", $3, T);
       $$ = strdup(T);
@@ -403,7 +469,7 @@ expr
     }
   | expr RELOP expr
     {
-      char *T = tempVar();
+      char *T = condVar();
       addQuadruple($1, $2, $3, T);
       $$ = strdup(T);
       free($1); free($3); free($2);
@@ -426,7 +492,7 @@ expr
   | INTCONST
     {
       char buf[32];
-      sprintf(buf, "(%d,%d)", $1.value, $1.base);
+      sprintf(buf, "(%d, %d)", $1.value, $1.base);
       $$ = strdup(buf);
     }
   | CHARCONST
@@ -439,7 +505,7 @@ expr
   | ID
     {
       int i = lookupSymbol($1);
-      if (i < 0)            yyerror("undeclared var");
+      if (i < 0) yyerror("undeclared var");
       if (!symtab[i].init) yyerror("uninitialized var");
       $$ = strdup($1);
       free($1);

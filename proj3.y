@@ -1,4 +1,3 @@
-/* proj3.y - Corrected Version */
 %{
 #include <stdio.h>
 #include <stdlib.h>
